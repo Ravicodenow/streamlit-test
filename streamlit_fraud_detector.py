@@ -621,12 +621,13 @@ def main():
         st.markdown("---")
         st.markdown("### 📊 Model Architecture")
         st.info("""
-        **ANN Configuration:**
-        - Input Layer: 30 features
-        - Hidden Layers: 64 → 32 → 16 neurons
+        **Dynamic ANN Configuration:**
+        - Input Layer: Adapts to your data (3-1000+ features)
+        - Hidden Layers: Auto-sized based on input
         - Activation: ReLU
         - Output: Sigmoid (fraud probability)
         - Regularization: L2 + Early Stopping
+        - Batch Size: Dynamic optimization
         """)
     
     # Main content area
@@ -805,25 +806,75 @@ def main():
             
             with col1:
                 st.info("""
-                **🎯 Your CSV should include:**
+                **🎯 Your CSV needs these basics:**
                 
-                🕐 **Time column** - Transaction timing  
-                💰 **Amount column** - Transaction value  
-                🔐 **Security features** - Anonymous pattern data (V1, V2, V3, etc.)  
-                📊 **Optional: Known results** - If you have fraud labels
+                🕐 **Any timing column** - When transactions occurred  
+                💰 **Any amount column** - Transaction values  
+                � **Numeric features** - Any number of security/pattern columns  
+                📊 **Optional: Target column** - Fraud labels (if available)
                 
-                **Most datasets have 30-31 columns total**
+                **✨ Works with ANY number of columns!**
                 """)
                 
                 st.success("""
-                **✅ Common Formats We Accept:**
+                **✅ We automatically detect:**
                 
-                • Standard fraud detection datasets  
-                • Kaggle credit card data  
-                • Bank transaction exports (anonymized)  
-                • Research datasets with PCA features  
+                • Column names (Time, timestamp, amount, etc.)  
+                • Feature count (3 to 1000+ columns supported)  
+                • Data types and formats  
+                • Target/fraud columns  
                 
-                **Just upload and we'll check the format for you!**
+                **Just upload - we'll handle the rest! 🚀**
+                """)
+            
+            with col2:
+                st.markdown("#### 📊 Example formats we support:")
+                
+                # Show multiple format examples
+                formats = [
+                    {"name": "Minimal (3 cols)", "cols": "Time, Amount, Score"},
+                    {"name": "Standard (30 cols)", "cols": "Time, V1-V28, Amount"},
+                    {"name": "Extended (50+ cols)", "cols": "Time, Features1-48, Amount"},
+                    {"name": "With Labels", "cols": "Time, Features, Amount, Class"}
+                ]
+                
+                for fmt in formats:
+                    st.markdown(f"**{fmt['name']}:**")
+                    st.code(fmt['cols'], language=None)
+                
+                st.caption("💡 Any of these formats (and more) will work!")
+            
+            # Add helpful guidance
+            st.markdown("---")
+            st.markdown("#### 🎯 What makes our system flexible:")
+            
+            tip_col1, tip_col2, tip_col3 = st.columns(3)
+            
+            with tip_col1:
+                st.markdown("""
+                **🔍 Smart Detection**
+                - Finds time/amount columns by name
+                - Identifies fraud/target columns  
+                - Handles any number of features
+                - Works with various formats
+                """)
+            
+            with tip_col2:
+                st.markdown("""
+                **🔧 Auto-Adaptation**
+                - Renames columns to standard format
+                - Adjusts model architecture dynamically
+                - Handles missing/extra columns
+                - Pads or trims data as needed
+                """)
+            
+            with tip_col3:
+                st.markdown("""
+                **📋 Simple Requirements**
+                - CSV file format
+                - Numeric data (except headers)
+                - At least 3 columns minimum
+                - No missing values
                 """)
             
             with col2:
@@ -877,50 +928,54 @@ def main():
         
         with tab2:
             st.markdown("""
-            ### 🔬 What are PCA Features (V1-V28)?
+            ### 🔬 Understanding Anonymous Features
             
-            **Principal Component Analysis (PCA)** is a dimensionality reduction technique used to:
+            **Why do many fraud detection datasets use anonymous/transformed features?**
             
-            #### 🔒 **Privacy Protection**
-            - Original credit card features contain sensitive information (card numbers, merchant details, etc.)
-            - PCA transforms these into anonymized mathematical representations
-            - Protects customer privacy while preserving fraud detection patterns
+            #### 🔒 **Privacy & Security**
+            - Raw credit card data contains sensitive information (card numbers, personal details, etc.)
+            - Data is transformed using techniques like **PCA (Principal Component Analysis)**
+            - This creates anonymous mathematical representations while preserving fraud patterns
+            - Protects customer privacy while enabling machine learning
             
-            #### 📊 **How PCA Works**
+            #### 📊 **How Data Transformation Works**
             1. **Original Features**: Real transaction data (sensitive)
             2. **Mathematical Transformation**: Convert to uncorrelated components
-            3. **V1-V28**: The most important 28 components that capture fraud patterns
-            4. **Result**: Anonymized features that maintain predictive power
+            3. **Anonymous Features**: V1, V2, V3... VN (any number of features)
+            4. **Result**: Privacy-safe features that maintain predictive power
             
-            #### 💡 **Key Points**
-            - **V1-V28** are the result of PCA transformation of confidential features
-            - Each V-feature is a linear combination of original features
-            - **Time** and **Amount** are kept in original form (less sensitive)
-            - Values typically range from -5 to +5 (standardized)
-            - Higher absolute values may indicate unusual patterns
+            #### 💡 **What This Means For You**
+            - **V-features** are common in fraud datasets (V1, V2, V3, etc.)
+            - Each feature is a mathematical combination of original data
+            - **Time** and **Amount** are often kept in original form (less sensitive)
+            - Feature values typically range from -5 to +5 (standardized)
+            - Our system works with **any number** of these features
             
-            #### 🎯 **For Your Data**
-            - If you have raw transaction data, you'll need to apply PCA transformation first
-            - If you already have V1-V28 features, you can use them directly
-            - The model expects exactly 28 V-features for optimal performance
+            #### 🎯 **For Your Dataset**
+            - **Have V1-V28 features?** Perfect - we'll use them directly
+            - **Have other numeric columns?** We'll treat them as anonymous features
+            - **Have raw transaction data?** You may need PCA transformation first
+            - **Any number of features?** Our model adapts automatically (3 to 1000+)
             """)
             
-            # Add a visual representation
+            # Add a visual representation with flexible examples
             col1, col2 = st.columns(2)
             with col1:
                 st.info("""
-                **✅ Good V-Feature Values:**
-                - V1: -1.35 (normal range)
-                - V2: 0.26 (typical value)
-                - V3: 2.53 (acceptable)
+                **✅ Good Feature Patterns:**
+                - Small values: -2.35, 0.26, 1.53
+                - Normal range: -5 to +5
+                - Most values near zero
+                - Some outliers are normal
                 """)
             
             with col2:
                 st.warning("""
-                **⚠️ Suspicious V-Feature Values:**
-                - V15: -8.42 (extreme outlier)
-                - V22: 15.73 (very unusual)
-                - V7: -12.11 (potential fraud indicator)
+                **⚠️ Watch Out For:**
+                - Extreme outliers: -50.42, 100.73
+                - All zeros (missing data)
+                - Text values mixed in
+                - Missing/NaN values
                 """)
         
         st.markdown("---")
