@@ -80,6 +80,21 @@ st.markdown("""
         border-left: 5px solid #2196f3;
         margin: 1rem 0;
     }
+    .transaction-details {
+        background-color: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 0.8rem;
+        border: 1px solid #e9ecef;
+        margin: 1rem 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .feature-stats {
+        background-color: #ffffff;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid #28a745;
+        margin: 0.5rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -638,31 +653,49 @@ def main():
             st.info("Click the button below to generate and analyze a random transaction")
         
         with col2:
-            if st.button("🎯 Generate & Predict", type="primary"):
-                features = generate_sample_transaction()
+            generate_clicked = st.button("🎯 Generate & Predict", type="primary")
+        
+        # Display results in full width below the button section
+        if generate_clicked:
+            features = generate_sample_transaction()
+            
+            # Display transaction details in full width
+            st.markdown("---")
+            st.subheader("📊 Generated Transaction Details")
+            
+            # Create a better layout for transaction details
+            col_metrics, col_table = st.columns([1, 2])
+            
+            with col_metrics:
+                st.markdown("#### 💰 Key Metrics")
+                st.metric("⏰ Time", f"{features[0]:.2f} seconds")
+                st.metric("💵 Amount", f"${features[-1]:.2f}")
                 
-                # Display transaction details
-                st.subheader("Generated Transaction:")
+                # Calculate some basic statistics
+                v_features_only = features[1:29]
+                st.metric("📊 Avg V-Features", f"{np.mean(v_features_only):.3f}")
+                st.metric("📈 Max V-Feature", f"{max(v_features_only):.3f}")
+                st.metric("📉 Min V-Feature", f"{min(v_features_only):.3f}")
+            
+            with col_table:
+                st.markdown("#### 🔢 All Features")
+                # Create a more organized DataFrame with better formatting
                 df_features = pd.DataFrame({
                     'Feature': ['Time', 'Amount'] + [f'V{i}' for i in range(1, 29)],
-                    'Value': [features[0], features[-1]] + features[1:29]
+                    'Value': [f"{features[0]:.2f}", f"{features[-1]:.2f}"] + [f"{v:.6f}" for v in features[1:29]],
+                    'Type': ['Temporal', 'Monetary'] + ['PCA-Transformed'] * 28
                 })
-                
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.metric("Time", f"{features[0]:.2f} seconds")
-                    st.metric("Amount", f"${features[-1]:.2f}")
-                
-                with col_b:
-                    st.dataframe(df_features, height=200)
-                
-                # Make prediction
-                with st.spinner("Analyzing transaction..."):
-                    try:
-                        result = detector.predict(features)
-                        display_prediction_result(result)
-                    except Exception as e:
-                        st.error(f"Prediction error: {e}")
+                st.dataframe(df_features, height=300, use_container_width=True)
+            
+            # Make prediction with better spacing
+            st.markdown("---")
+            with st.spinner("🔍 Analyzing transaction for fraud patterns..."):
+                try:
+                    result = detector.predict(features)
+                    # Display prediction results in full width
+                    display_prediction_result(result)
+                except Exception as e:
+                    st.error(f"❌ Prediction error: {e}")
     
     else:  # Bulk CSV Upload
         st.header("📄 Bulk CSV Analysis")
