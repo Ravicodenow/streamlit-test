@@ -33,6 +33,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Page configuration
+# User for page layout
 st.set_page_config(
     page_title="Credit Card Fraud Detection",
     page_icon="💳",
@@ -98,6 +99,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Backend model and processing class
 class CreditCardFraudDetector:
     """Credit Card Fraud Detection using Artificial Neural Network"""
     
@@ -293,7 +295,7 @@ class CreditCardFraudDetector:
         
         return results
 
-# Initialize the detector
+# Frontend with Streamlit
 @st.cache_resource
 def get_fraud_detector():
     """Get or create the fraud detector instance"""
@@ -727,6 +729,271 @@ def main():
                     st.info("💡 **Tip:** Try training the model first using the sidebar if you haven't already.")
     
     else:  # Bulk CSV Upload
+        st.header("📄 Bulk CSV Analysis")
+        
+        # Add data format explanation and PCA description
+        st.markdown("### 📋 Expected Data Format")
+        
+        # Create tabs for better organization
+        tab1, tab2 = st.tabs(["📊 Data Format", "🔬 About PCA Features"])
+        
+        with tab1:
+            st.markdown("""
+            **Your CSV file should contain exactly 30 or 31 columns:**
+            
+            - **30 columns (for prediction only):** Time, V1, V2, ..., V28, Amount
+            - **31 columns (with ground truth):** Time, V1, V2, ..., V28, Amount, Class
+            
+            **Column Details:**
+            """)
+            
+            # Create sample data format table
+            col1, col2 = st.columns([1, 2])
+            
+            with col1:
+                st.markdown("""
+                | Column | Description |
+                |--------|-------------|
+                | **Time** | Seconds elapsed since first transaction |
+                | **V1-V28** | PCA-transformed features (anonymized) |
+                | **Amount** | Transaction amount in dollars |
+                | **Class** | Target variable (0=Normal, 1=Fraud) - Optional |
+                """)
+            
+            with col2:
+                # Show sample data
+                sample_data = pd.DataFrame({
+                    'Time': [0, 406, 540],
+                    'V1': [-1.3598071, 1.1918571, -3.0434132],
+                    'V2': [-0.0727812, 0.2661507, 1.0128311],
+                    'V3': [2.5363467, 0.1664801, -3.1577402],
+                    '...': ['...', '...', '...'],
+                    'V27': [-0.0089831, 0.0147242, 0.5278206],
+                    'V28': [-0.0222187, 0.0095321, -0.2219620],
+                    'Amount': [149.62, 2.69, 378.66],
+                    'Class': [0, 0, 1]
+                })
+                
+                st.dataframe(sample_data, use_container_width=True)
+                st.caption("📝 Sample data format (Class column is optional for prediction)")
+        
+        with tab2:
+            st.markdown("""
+            ### 🔬 What are PCA Features (V1-V28)?
+            
+            **Principal Component Analysis (PCA)** is a dimensionality reduction technique used to:
+            
+            #### 🔒 **Privacy Protection**
+            - Original credit card features contain sensitive information (card numbers, merchant details, etc.)
+            - PCA transforms these into anonymized mathematical representations
+            - Protects customer privacy while preserving fraud detection patterns
+            
+            #### 📊 **How PCA Works**
+            1. **Original Features**: Real transaction data (sensitive)
+            2. **Mathematical Transformation**: Convert to uncorrelated components
+            3. **V1-V28**: The most important 28 components that capture fraud patterns
+            4. **Result**: Anonymized features that maintain predictive power
+            
+            #### 💡 **Key Points**
+            - **V1-V28** are the result of PCA transformation of confidential features
+            - Each V-feature is a linear combination of original features
+            - **Time** and **Amount** are kept in original form (less sensitive)
+            - Values typically range from -5 to +5 (standardized)
+            - Higher absolute values may indicate unusual patterns
+            
+            #### 🎯 **For Your Data**
+            - If you have raw transaction data, you'll need to apply PCA transformation first
+            - If you already have V1-V28 features, you can use them directly
+            - The model expects exactly 28 V-features for optimal performance
+            """)
+            
+            # Add a visual representation
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info("""
+                **✅ Good V-Feature Values:**
+                - V1: -1.35 (normal range)
+                - V2: 0.26 (typical value)
+                - V3: 2.53 (acceptable)
+                """)
+            
+            with col2:
+                st.warning("""
+                **⚠️ Suspicious V-Feature Values:**
+                - V15: -8.42 (extreme outlier)
+                - V22: 15.73 (very unusual)
+                - V7: -12.11 (potential fraud indicator)
+                """)
+        
+        st.markdown("---")
+        
+        uploaded_file = st.file_uploader(
+            "Upload CSV file with transaction data",
+            type=['csv'],
+            help="CSV should have 30 columns (Time, V1-V28, Amount) or 31 columns (with Class column for comparison)"
+        )
+        
+        if uploaded_file is not None:
+            try:
+                df = pd.read_csv(uploaded_file)
+                
+                st.success(f"✅ Loaded {len(df):,} transactions from your CSV file")
+                
+                # Validate data format
+                st.markdown("### 🔍 Data Validation")
+                
+                # Handle both 30 and 31 column formats
+                if df.shape[1] == 31:
+                    st.info("🔍 Detected 31 columns - assuming last column is 'Class' (target). Will remove it for prediction.")
+                    # Remove the Class column (target) if present
+                    if 'Class' in df.columns:
+                        actual_labels = df['Class'].copy()
+                        df = df.drop('Class', axis=1)
+                        st.success(f"📊 Found Class column with {actual_labels.sum():,} fraud cases ({actual_labels.mean()*100:.2f}% fraud rate)")
+                    else:
+                        # If no 'Class' column, remove the last column
+                        df = df.iloc[:, :-1]
+                elif df.shape[1] == 30:
+                    st.success("✅ Perfect! Detected exactly 30 columns for prediction.")
+                else:
+                    st.error(f"❌ Invalid format: Expected 30 or 31 columns, got {df.shape[1]}.")
+                    st.markdown("""
+                    **Please check your CSV format:**
+                    - **30 columns**: Time, V1, V2, ..., V28, Amount
+                    - **31 columns**: Time, V1, V2, ..., V28, Amount, Class
+                    
+                    **Common issues:**
+                    - Missing columns (incomplete data)
+                    - Extra columns (wrong format)
+                    - Headers not matching expected format
+                    """)
+                    return
+                
+                # Validate feature ranges
+                st.markdown("### 📊 Feature Range Validation")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    time_range = f"{df['Time'].min():.0f} - {df['Time'].max():.0f}"
+                    st.metric("⏰ Time Range (seconds)", time_range)
+                    if df['Time'].max() > 200000:
+                        st.warning("⚠️ Very large time values detected")
+                
+                with col2:
+                    amount_range = f"${df['Amount'].min():.2f} - ${df['Amount'].max():.2f}"
+                    st.metric("💰 Amount Range", amount_range)
+                    if df['Amount'].max() > 50000:
+                        st.warning("⚠️ Very large transaction amounts detected")
+                
+                with col3:
+                    v_features = [col for col in df.columns if col.startswith('V')]
+                    v_range = f"{df[v_features].min().min():.2f} - {df[v_features].max().max():.2f}"
+                    st.metric("🔢 V-Features Range", v_range)
+                    if abs(df[v_features].min().min()) > 10 or df[v_features].max().max() > 10:
+                        st.warning("⚠️ Some V-features have extreme values")
+                
+                # Show data preview with better formatting
+                with st.expander("📊 Data Preview (First 10 Rows)", expanded=True):
+                    preview_df = df.head(10)
+                    
+                    # Format the display for better readability
+                    styled_df = preview_df.style.format({
+                        'Time': '{:.0f}',
+                        'Amount': '${:.2f}'
+                    })
+                    
+                    # Format V-features
+                    v_cols = [col for col in preview_df.columns if col.startswith('V')]
+                    v_format = {col: '{:.6f}' for col in v_cols}
+                    styled_df = styled_df.format(v_format)
+                    
+                    st.dataframe(styled_df, use_container_width=True)
+                    
+                    # Add summary stats
+                    st.caption(f"📈 Showing first 10 of {len(df):,} transactions | 📊 {len(v_cols)} V-features detected")
+                
+                # Processing options
+                st.markdown("### ⚙️ Processing Options")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    max_rows = st.number_input(
+                        "Maximum rows to process:",
+                        min_value=1,
+                        max_value=len(df),
+                        value=min(1000, len(df)),
+                        help="Limit processing for faster results. Use smaller numbers for quick testing."
+                    )
+                
+                with col2:
+                    st.metric("📁 Total File Size", f"{len(df):,} rows")
+                    processing_time_est = max_rows / 1000 * 2  # Rough estimate
+                    st.caption(f"⏱️ Estimated processing time: ~{processing_time_est:.1f} seconds")
+                
+                with col3:
+                    show_detailed_results = st.checkbox(
+                        "Show detailed results",
+                        value=True,
+                        help="Display comprehensive analysis charts and statistics"
+                    )
+                
+                if st.button("🚀 Start Fraud Analysis", type="primary", use_container_width=True):
+                    # Limit rows if specified
+                    if max_rows < len(df):
+                        df_subset = df.head(max_rows)
+                        st.info(f"🔍 Processing first {max_rows:,} rows out of {len(df):,} total")
+                    else:
+                        df_subset = df
+                        st.info(f"🔍 Processing all {len(df):,} transactions")
+                    
+                    try:
+                        if show_detailed_results:
+                            analyze_bulk_transactions(df_subset, detector)
+                        else:
+                            # Quick analysis mode
+                            st.info("⚡ Quick analysis mode - processing transactions...")
+                            results = detector.predict_bulk(df_subset.values.tolist())
+                            fraud_count = sum(1 for r in results if r['is_fraud'])
+                            
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("🔍 Transactions Analyzed", f"{len(results):,}")
+                            with col2:
+                                st.metric("🚨 Fraud Detected", f"{fraud_count:,}")
+                            with col3:
+                                st.metric("📊 Fraud Rate", f"{fraud_count/len(results)*100:.2f}%")
+                            
+                            st.success("✅ Quick analysis completed!")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Analysis error: {e}")
+                        st.info("""
+                        **Troubleshooting Tips:**
+                        - Ensure all feature values are numeric
+                        - Check for missing values (NaN)
+                        - Verify V-features are within reasonable ranges
+                        - Try with a smaller sample size first
+                        """)
+                        
+            except Exception as e:
+                st.error(f"❌ Error reading CSV: {str(e)}")
+                st.markdown("""
+                **Common CSV Issues:**
+                - **Encoding problems**: Try saving as UTF-8
+                - **Delimiter issues**: Ensure comma-separated values
+                - **Missing headers**: First row should contain column names
+                - **Mixed data types**: All values should be numeric (except headers)
+                - **File corruption**: Try re-exporting the data
+                
+                **Quick Fix:**
+                1. Open your CSV in Excel or similar
+                2. Verify 30-31 columns with proper names
+                3. Save as CSV (UTF-8) format
+                4. Try uploading again
+                """)
+
         st.header("📄 Bulk CSV Analysis")
         
         uploaded_file = st.file_uploader(
