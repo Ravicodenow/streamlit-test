@@ -108,25 +108,34 @@ class CreditCardFraudDetector:
         self.scaler = StandardScaler()
         self.is_trained = False
         self.model_info = {}
+        self.expected_features = None  # Track expected number of features
+        self.feature_columns = None   # Track feature column names
         
-    def create_sample_dataset(self, n_samples=10000):
+    def create_sample_dataset(self, n_samples=10000, n_features=30):
         """Create a sample credit card fraud dataset for testing"""
-        st.info("🔄 Creating sample dataset for demonstration...")
+        st.info(f"🔄 Creating sample dataset with {n_features} features...")
         
-        # Generate synthetic dataset similar to credit card fraud data
+        # Generate synthetic dataset with flexible feature count
         X, y = make_classification(
             n_samples=n_samples,
-            n_features=30,
-            n_informative=20,
-            n_redundant=5,
+            n_features=n_features,
+            n_informative=min(n_features-2, 20),  # Adjust informative features
+            n_redundant=min(n_features//6, 5),    # Adjust redundant features
             n_clusters_per_class=1,
             weights=[0.99, 0.01],  # Imbalanced like real fraud data
             flip_y=0.01,
             random_state=42
         )
         
-        # Create feature names
-        feature_names = ['Time'] + [f'V{i}' for i in range(1, 29)] + ['Amount']
+        # Create feature names dynamically
+        if n_features <= 30:
+            # Standard format: Time + V-features + Amount
+            v_count = n_features - 2
+            feature_names = ['Time'] + [f'V{i}' for i in range(1, v_count + 1)] + ['Amount']
+        else:
+            # Extended format: Time + more V-features + Amount
+            v_count = n_features - 2
+            feature_names = ['Time'] + [f'V{i}' for i in range(1, v_count + 1)] + ['Amount']
         
         # Create DataFrame
         df = pd.DataFrame(X, columns=feature_names)
@@ -163,16 +172,31 @@ class CreditCardFraudDetector:
         X = df.drop('Class', axis=1)
         y = df['Class']
         
+        # Store feature information for consistency
+        self.expected_features = X.shape[1]
+        self.feature_columns = X.columns.tolist()
+        
         return X, y
     
     def build_ann_model(self, input_dim):
-        """Build Artificial Neural Network for binary classification"""
+        """Build Artificial Neural Network for binary classification with dynamic architecture"""
+        
+        # Dynamic architecture based on input dimensions
+        if input_dim <= 10:
+            hidden_layers = (32, 16)
+        elif input_dim <= 30:
+            hidden_layers = (64, 32, 16)
+        elif input_dim <= 50:
+            hidden_layers = (128, 64, 32)
+        else:
+            hidden_layers = (256, 128, 64, 32)
+        
         model = MLPClassifier(
-            hidden_layer_sizes=(64, 32, 16),
+            hidden_layer_sizes=hidden_layers,
             activation='relu',
             solver='adam',
             alpha=0.001,  # L2 regularization
-            batch_size=256,
+            batch_size=min(256, max(32, input_dim * 8)),  # Dynamic batch size
             learning_rate='adaptive',
             max_iter=500,
             random_state=42,
@@ -247,7 +271,7 @@ class CreditCardFraudDetector:
         return True
     
     def predict(self, transaction_data):
-        """Predict fraud probability for new transaction"""
+        """Predict fraud probability for new transaction with flexible input"""
         if not self.is_trained:
             raise ValueError("Model is not trained!")
         
@@ -256,6 +280,22 @@ class CreditCardFraudDetector:
             transaction_data = np.array(transaction_data).reshape(1, -1)
         elif len(transaction_data.shape) == 1:
             transaction_data = transaction_data.reshape(1, -1)
+        
+        # Check feature count consistency
+        input_features = transaction_data.shape[1]
+        if input_features != self.expected_features:
+            st.warning(f"⚠️ Input has {input_features} features, but model expects {self.expected_features}")
+            
+            # Try to adapt the input
+            if input_features > self.expected_features:
+                # Too many features - take the first N
+                transaction_data = transaction_data[:, :self.expected_features]
+                st.info(f"🔧 Using first {self.expected_features} features")
+            else:
+                # Too few features - pad with zeros
+                padding = np.zeros((1, self.expected_features - input_features))
+                transaction_data = np.concatenate([transaction_data, padding], axis=1)
+                st.info(f"🔧 Padded with zeros to match {self.expected_features} features")
         
         # Scale the input
         transaction_scaled = self.scaler.transform(transaction_data)
@@ -271,12 +311,28 @@ class CreditCardFraudDetector:
         }
     
     def predict_bulk(self, transactions_data):
-        """Predict fraud for multiple transactions"""
+        """Predict fraud for multiple transactions with flexible input"""
         if not self.is_trained:
             raise ValueError("Model is not trained!")
         
         # Convert to numpy array
         transaction_array = np.array(transactions_data)
+        
+        # Check feature count consistency
+        input_features = transaction_array.shape[1]
+        if input_features != self.expected_features:
+            st.warning(f"⚠️ Input has {input_features} features, but model expects {self.expected_features}")
+            
+            # Try to adapt the input
+            if input_features > self.expected_features:
+                # Too many features - take the first N
+                transaction_array = transaction_array[:, :self.expected_features]
+                st.info(f"🔧 Using first {self.expected_features} features for all transactions")
+            else:
+                # Too few features - pad with zeros
+                padding = np.zeros((transaction_array.shape[0], self.expected_features - input_features))
+                transaction_array = np.concatenate([transaction_array, padding], axis=1)
+                st.info(f"🔧 Padded all transactions with zeros to match {self.expected_features} features")
         
         # Scale the data
         transaction_scaled = self.scaler.transform(transaction_array)
@@ -739,43 +795,85 @@ def main():
         
         with tab1:
             st.markdown("""
-            **Your CSV file should contain exactly 30 or 31 columns:**
+            ### 📁 What type of data file do I need?
             
-            - **30 columns (for prediction only):** Time, V1, V2, ..., V28, Amount
-            - **31 columns (with ground truth):** Time, V1, V2, ..., V28, Amount, Class
-            
-            **Column Details:**
+            You need a **CSV file with credit card transaction data**. Don't worry about the exact format - our system will help validate it!
             """)
             
-            # Create sample data format table
-            col1, col2 = st.columns([1, 2])
+            # Create a more user-friendly explanation
+            col1, col2 = st.columns([1, 1])
             
             with col1:
-                st.markdown("""
-                | Column | Description |
-                |--------|-------------|
-                | **Time** | Seconds elapsed since first transaction |
-                | **V1-V28** | PCA-transformed features (anonymized) |
-                | **Amount** | Transaction amount in dollars |
-                | **Class** | Target variable (0=Normal, 1=Fraud) - Optional |
+                st.info("""
+                **🎯 Your CSV should include:**
+                
+                🕐 **Time column** - Transaction timing  
+                💰 **Amount column** - Transaction value  
+                🔐 **Security features** - Anonymous pattern data (V1, V2, V3, etc.)  
+                📊 **Optional: Known results** - If you have fraud labels
+                
+                **Most datasets have 30-31 columns total**
+                """)
+                
+                st.success("""
+                **✅ Common Formats We Accept:**
+                
+                • Standard fraud detection datasets  
+                • Kaggle credit card data  
+                • Bank transaction exports (anonymized)  
+                • Research datasets with PCA features  
+                
+                **Just upload and we'll check the format for you!**
                 """)
             
             with col2:
-                # Show sample data
+                st.markdown("#### 📊 What your data might look like:")
+                # Show sample data with more user-friendly values
                 sample_data = pd.DataFrame({
                     'Time': [0, 406, 540],
-                    'V1': [-1.3598071, 1.1918571, -3.0434132],
-                    'V2': [-0.0727812, 0.2661507, 1.0128311],
-                    'V3': [2.5363467, 0.1664801, -3.1577402],
-                    '...': ['...', '...', '...'],
-                    'V27': [-0.0089831, 0.0147242, 0.5278206],
-                    'V28': [-0.0222187, 0.0095321, -0.2219620],
+                    'V1': [-1.36, 1.19, -3.04],
+                    'V2': [-0.07, 0.27, 1.01],
+                    'V3': [2.54, 0.17, -3.16],
+                    '...': ['28 more V columns...', '...', '...'],
                     'Amount': [149.62, 2.69, 378.66],
-                    'Class': [0, 0, 1]
+                    'Class': ['0 (Normal)', '0 (Normal)', '1 (Fraud)']
                 })
                 
                 st.dataframe(sample_data, use_container_width=True)
-                st.caption("📝 Sample data format (Class column is optional for prediction)")
+                st.caption("� Don't worry about exact column names - we'll guide you!")
+            
+            # Add helpful guidance
+            st.markdown("---")
+            st.markdown("#### 🚀 Getting Started:")
+            
+            tip_col1, tip_col2, tip_col3 = st.columns(3)
+            
+            with tip_col1:
+                st.markdown("""
+                **📋 File Requirements**
+                - CSV format (.csv file)
+                - Column headers in first row
+                - Numeric data (no text values)
+                - No missing/empty cells
+                """)
+            
+            with tip_col2:
+                st.markdown("""
+                **🔢 Typical Data**
+                - 30+ columns with transaction features
+                - Time values (any format)
+                - Amount in dollars/currency
+                - V1-V28 security features (-5 to +5 range)
+                """)
+            
+            with tip_col3:
+                st.markdown("""
+                **❓ Need Help?**
+                - Try our sample transaction generator
+                - Check the PCA features explanation
+                - Upload any credit card dataset to test
+                - We'll validate and guide you
+                """)
         
         with tab2:
             st.markdown("""
@@ -830,7 +928,7 @@ def main():
         uploaded_file = st.file_uploader(
             "Upload CSV file with transaction data",
             type=['csv'],
-            help="CSV should have 30 columns (Time, V1-V28, Amount) or 31 columns (with Class column for comparison)"
+            help="Upload any credit card dataset - we'll automatically detect and adapt to your format!"
         )
         
         if uploaded_file is not None:
@@ -839,34 +937,144 @@ def main():
                 
                 st.success(f"✅ Loaded {len(df):,} transactions from your CSV file")
                 
-                # Validate data format
-                st.markdown("### 🔍 Data Validation")
+                # Smart data format detection and validation
+                st.markdown("### 🔍 Smart Data Analysis")
                 
-                # Handle both 30 and 31 column formats
-                if df.shape[1] == 31:
-                    st.info("🔍 Detected 31 columns - assuming last column is 'Class' (target). Will remove it for prediction.")
-                    # Remove the Class column (target) if present
-                    if 'Class' in df.columns:
-                        actual_labels = df['Class'].copy()
-                        df = df.drop('Class', axis=1)
-                        st.success(f"📊 Found Class column with {actual_labels.sum():,} fraud cases ({actual_labels.mean()*100:.2f}% fraud rate)")
-                    else:
-                        # If no 'Class' column, remove the last column
-                        df = df.iloc[:, :-1]
-                elif df.shape[1] == 30:
-                    st.success("✅ Perfect! Detected exactly 30 columns for prediction.")
-                else:
-                    st.error(f"❌ Invalid format: Expected 30 or 31 columns, got {df.shape[1]}.")
-                    st.markdown("""
-                    **Please check your CSV format:**
-                    - **30 columns**: Time, V1, V2, ..., V28, Amount
-                    - **31 columns**: Time, V1, V2, ..., V28, Amount, Class
+                original_columns = df.shape[1]
+                st.info(f"📊 Analyzing your dataset: {len(df):,} transactions with {original_columns} columns")
+                
+                # Smart column detection
+                def detect_and_prepare_data(df):
+                    """Intelligently detect and prepare data for prediction"""
                     
-                    **Common issues:**
-                    - Missing columns (incomplete data)
-                    - Extra columns (wrong format)
-                    - Headers not matching expected format
+                    # Look for common column patterns
+                    cols = df.columns.tolist()
+                    
+                    # Find Time column (various names)
+                    time_cols = [col for col in cols if 'time' in col.lower() or 'timestamp' in col.lower()]
+                    
+                    # Find Amount column (various names)  
+                    amount_cols = [col for col in cols if 'amount' in col.lower() or 'value' in col.lower() or 'transaction' in col.lower()]
+                    
+                    # Find V-features (PCA columns)
+                    v_cols = [col for col in cols if col.startswith('V') and col[1:].isdigit()]
+                    
+                    # Find Class/Target column
+                    class_cols = [col for col in cols if col.lower() in ['class', 'target', 'label', 'fraud', 'is_fraud']]
+                    
+                    st.write("🔍 **Column Detection Results:**")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        if time_cols:
+                            st.success(f"⏰ Time column: {time_cols[0]}")
+                            detected_time = time_cols[0]
+                        else:
+                            # Try to find first numeric column that could be time
+                            numeric_cols = df.select_dtypes(include=[np.number]).columns
+                            if len(numeric_cols) > 0:
+                                detected_time = numeric_cols[0]
+                                st.warning(f"⏰ Using '{detected_time}' as time column")
+                            else:
+                                st.error("❌ No time column found")
+                                return None
+                    
+                    with col2:
+                        if amount_cols:
+                            st.success(f"💰 Amount column: {amount_cols[0]}")
+                            detected_amount = amount_cols[0]
+                        else:
+                            # Try to find a column that looks like amounts
+                            numeric_cols = df.select_dtypes(include=[np.number]).columns
+                            potential_amount = [col for col in numeric_cols if col != detected_time]
+                            if potential_amount:
+                                detected_amount = potential_amount[-1]  # Often the last numeric column
+                                st.warning(f"💰 Using '{detected_amount}' as amount column")
+                            else:
+                                st.error("❌ No amount column found")
+                                return None
+                    
+                    with col3:
+                        if v_cols:
+                            st.success(f"🔢 Found {len(v_cols)} V-features")
+                        else:
+                            # Look for numeric columns that could be features
+                            all_numeric = df.select_dtypes(include=[np.number]).columns
+                            feature_cols = [col for col in all_numeric if col not in [detected_time, detected_amount]]
+                            st.warning(f"🔢 Using {len(feature_cols)} feature columns")
+                            # Rename them to V1, V2, etc. for consistency
+                            v_cols = [f'V{i+1}' for i in range(len(feature_cols))]
+                    
+                    # Handle class column if present
+                    target_removed = False
+                    if class_cols:
+                        class_col = class_cols[0]
+                        st.info(f"🏷️ Found target column '{class_col}' - will remove for prediction")
+                        target_values = df[class_col].copy()
+                        df = df.drop(class_col, axis=1)
+                        target_removed = True
+                        
+                        # Show class distribution
+                        if target_values.dtype == 'object':
+                            fraud_count = sum(target_values.str.lower().isin(['fraud', '1', 'true', 'yes']))
+                        else:
+                            fraud_count = sum(target_values == 1)
+                        st.success(f"📊 Found {fraud_count:,} fraud cases ({fraud_count/len(target_values)*100:.2f}% fraud rate)")
+                    
+                    # Reconstruct dataframe with standard format
+                    try:
+                        # Prepare the final dataset
+                        final_df = pd.DataFrame()
+                        
+                        # Add time column
+                        final_df['Time'] = df[detected_time]
+                        
+                        # Add V-features (either existing V1-V28 or rename other features)
+                        if len(v_cols) > 0 and all(col in df.columns for col in v_cols):
+                            # We have proper V-columns
+                            for v_col in sorted(v_cols):
+                                final_df[v_col] = df[v_col]
+                        else:
+                            # Use other numeric features as V-columns
+                            feature_cols = [col for col in df.select_dtypes(include=[np.number]).columns 
+                                          if col not in [detected_time, detected_amount] + class_cols]
+                            
+                            for i, col in enumerate(feature_cols):  # Use all available features
+                                final_df[f'V{i+1}'] = df[col]
+                        
+                        # Add amount column
+                        final_df['Amount'] = df[detected_amount]
+                        
+                        return final_df
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error preparing data: {e}")
+                        return None
+                
+                # Try to prepare the data
+                processed_df = detect_and_prepare_data(df)
+                
+                if processed_df is None:
+                    st.error("❌ Could not process your data format. Please check your CSV file.")
+                    st.markdown("""
+                    **What we need:**
+                    - At least one column for transaction timing
+                    - At least one column for transaction amounts  
+                    - Additional numeric columns for security features
+                    - All values should be numeric (no text except headers)
                     """)
+                    return
+                
+                # Update df to the processed version
+                df = processed_df
+                final_columns = df.shape[1]
+                
+                if final_columns >= 3:  # Minimum: Time, Amount, at least 1 feature
+                    st.success(f"✅ Great! Successfully prepared {final_columns} columns for prediction.")
+                    st.info(f"📊 Features: {final_columns-2} security features + Time + Amount")
+                else:
+                    st.error(f"❌ Not enough columns. Need at least 3 columns (Time, Amount, + features).")
                     return
                 
                 # Validate feature ranges
