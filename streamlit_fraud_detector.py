@@ -659,43 +659,72 @@ def main():
         if generate_clicked:
             features = generate_sample_transaction()
             
-            # Display transaction details in full width
+            # Display transaction details in full width with better styling
             st.markdown("---")
-            st.subheader("📊 Generated Transaction Details")
             
-            # Create a better layout for transaction details
-            col_metrics, col_table = st.columns([1, 2])
-            
-            with col_metrics:
-                st.markdown("#### 💰 Key Metrics")
-                st.metric("⏰ Time", f"{features[0]:.2f} seconds")
-                st.metric("💵 Amount", f"${features[-1]:.2f}")
+            # Use container for better organization
+            with st.container():
+                st.markdown('<div class="transaction-details">', unsafe_allow_html=True)
+                st.subheader("📊 Generated Transaction Details")
                 
-                # Calculate some basic statistics
-                v_features_only = features[1:29]
-                st.metric("📊 Avg V-Features", f"{np.mean(v_features_only):.3f}")
-                st.metric("📈 Max V-Feature", f"{max(v_features_only):.3f}")
-                st.metric("📉 Min V-Feature", f"{min(v_features_only):.3f}")
+                # Create a better layout for transaction details
+                col_metrics, col_table = st.columns([1, 2])
+                
+                with col_metrics:
+                    st.markdown('<div class="feature-stats">', unsafe_allow_html=True)
+                    st.markdown("#### 💰 Key Metrics")
+                    st.metric("⏰ Time", f"{features[0]:.2f} seconds", 
+                             help="Seconds elapsed since the first transaction in the dataset")
+                    st.metric("💵 Amount", f"${features[-1]:.2f}", 
+                             help="Transaction amount in USD")
+                    
+                    # Calculate some basic statistics
+                    v_features_only = features[1:29]
+                    st.metric("📊 Avg V-Features", f"{np.mean(v_features_only):.3f}",
+                             help="Average of all PCA-transformed features")
+                    st.metric("📈 Max V-Feature", f"{max(v_features_only):.3f}",
+                             help="Highest PCA-transformed feature value")
+                    st.metric("📉 Min V-Feature", f"{min(v_features_only):.3f}",
+                             help="Lowest PCA-transformed feature value")
+                    st.markdown('</div>', unsafe_allow_html=True)
+                
+                with col_table:
+                    st.markdown("#### 🔢 All Features")
+                    # Create a more organized DataFrame with better formatting
+                    df_features = pd.DataFrame({
+                        'Feature': ['Time', 'Amount'] + [f'V{i}' for i in range(1, 29)],
+                        'Value': [f"{features[0]:.2f}", f"{features[-1]:.2f}"] + [f"{v:.6f}" for v in features[1:29]],
+                        'Type': ['Temporal', 'Monetary'] + ['PCA-Transformed'] * 28
+                    })
+                    
+                    # Add search functionality for the table
+                    st.caption("🔍 You can scroll through all 30 features below:")
+                    st.dataframe(
+                        df_features, 
+                        height=350, 
+                        use_container_width=True,
+                        column_config={
+                            "Feature": st.column_config.TextColumn("Feature", width="medium"),
+                            "Value": st.column_config.NumberColumn("Value", format="%.6f"),
+                            "Type": st.column_config.TextColumn("Type", width="medium")
+                        }
+                    )
+                
+                st.markdown('</div>', unsafe_allow_html=True)
             
-            with col_table:
-                st.markdown("#### 🔢 All Features")
-                # Create a more organized DataFrame with better formatting
-                df_features = pd.DataFrame({
-                    'Feature': ['Time', 'Amount'] + [f'V{i}' for i in range(1, 29)],
-                    'Value': [f"{features[0]:.2f}", f"{features[-1]:.2f}"] + [f"{v:.6f}" for v in features[1:29]],
-                    'Type': ['Temporal', 'Monetary'] + ['PCA-Transformed'] * 28
-                })
-                st.dataframe(df_features, height=300, use_container_width=True)
-            
-            # Make prediction with better spacing
+            # Make prediction with better spacing and styling
             st.markdown("---")
+            st.subheader("🎯 Fraud Analysis Results")
+            
             with st.spinner("🔍 Analyzing transaction for fraud patterns..."):
                 try:
                     result = detector.predict(features)
-                    # Display prediction results in full width
+                    # Display prediction results in full width with enhanced styling
+                    st.success("✅ Analysis completed successfully!")
                     display_prediction_result(result)
                 except Exception as e:
                     st.error(f"❌ Prediction error: {e}")
+                    st.info("💡 **Tip:** Try training the model first using the sidebar if you haven't already.")
     
     else:  # Bulk CSV Upload
         st.header("📄 Bulk CSV Analysis")
